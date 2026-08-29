@@ -17,7 +17,9 @@ from typing import Dict, Any
 
 from vision import capture_frame, analyze_scene, print_diagnostic_output, draw_debug_visualization
 from generator import generate_pookalam_design
-from gcode_converter import convert_to_gcode
+from gcode_converter import compile_svg, validate_gcode, design_quality
+from svg_normalizer import normalize_svg
+from geometry import render_svg_preview
 from cnc_streamer import stream_gcode
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -41,13 +43,15 @@ def run_pipeline(
     serial_port: str = "/dev/ttyACM0",
     baudrate: int = 115200,
     simulate_cnc: bool = False,
-    png_output: str = "pookalam.png",
-    gcode_output: str = "plot.gcode"
+    png_output: str = "test_outputs/pookalam.png",
+    gcode_output: str = "test_outputs/plot.gcode"
 ) -> bool:
     """
     Executes the linear 4-stage Physical AI Pookalam Assistant pipeline.
     """
     start_time = time.time()
+    output_dir = os.path.dirname(png_output) or "."
+    os.makedirs(output_dir, exist_ok=True)
 
     print_banner(
         "[AI POOKALAM ASSISTANT]",
@@ -67,7 +71,7 @@ def run_pipeline(
 
         if visualize:
             import cv2
-            overlay_file = "vision_debug_overlay.png"
+            overlay_file = os.path.join(output_dir, "vision_debug_overlay.png")
             debug_img = draw_debug_visualization(raw_frame, telemetry)
             cv2.imwrite(overlay_file, debug_img)
             logger.info(f"[STAGE 1 SUCCESS] Diagnostic HUD overlay saved to '{overlay_file}'.")
@@ -88,11 +92,14 @@ def run_pipeline(
     time.sleep(0.5)
 
     try:
-        generated_png = generate_pookalam_design(
+        generated_svg = generate_pookalam_design(
             colors_or_observation=telemetry,
-            output_path=png_output
+            output_path=os.path.splitext(png_output)[0] + ".svg"
         )
-        logger.info(f"[STAGE 2 SUCCESS] Concentric Pookalam design saved to '{generated_png}'.")
+        preview_png = png_output if png_output.lower().endswith(".png") else os.path.splitext(png_output)[0] + ".png"
+        render_svg_preview(generated_svg, preview_png)
+        logger.info(f"[STAGE 2 SUCCESS] Deterministic geometry source saved to '{generated_svg}'.")
+        logger.info(f"[STAGE 2 SUCCESS] PNG preview saved to '{preview_png}'.")
     except Exception as err:
         logger.error(f"[STAGE 2 FAILURE] Generative AI design synthesis error: {err}")
         return False
@@ -104,12 +111,9 @@ def run_pipeline(
     time.sleep(0.5)
 
     try:
-        compiled_gcode = convert_to_gcode(
-            png_path=generated_png,
-            gcode_path=gcode_output,
-            target_width=70.0,
-            target_height=70.0
-        )
+        compiled_gcode = compile_svg(generated_svg, gcode_output)
+        logger.info(f"[DESIGN QUALITY] {design_quality(normalize_svg(generated_svg))}")
+        logger.info(f"[G-CODE PRE-FLIGHT] {validate_gcode(compiled_gcode)}")
         logger.info(f"[STAGE 3 SUCCESS] G-Code generated and scaled strictly to 70x70mm: '{compiled_gcode}'.")
     except Exception as err:
         logger.error(f"[STAGE 3 FAILURE] G-Code compilation error: {err}")
@@ -144,8 +148,8 @@ def run_pipeline(
         f"Total End-to-End Execution Time: {elapsed}s"
     )
     logger.info("Artifacts Generated:")
-    logger.info(f"  * Vision Overlay : {'vision_debug_overlay.png' if visualize else 'Skipped (--visualize to enable)'}")
-    logger.info(f"  * Pookalam Design: {png_output}")
+    logger.info(f"  * Vision Overlay : {os.path.join(output_dir, 'vision_debug_overlay.png') if visualize else 'Skipped (--visualize to enable)'}")
+    logger.info(f"  * Pookalam Preview: {preview_png}")
     logger.info(f"  * Vector SVG     : {os.path.splitext(png_output)[0] + '.svg'}")
     logger.info(f"  * Plotter G-Code : {gcode_output} (70x70 mm bounded)")
     logger.info("\n" + "=" * 70 + "\n")
@@ -192,13 +196,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output-png",
         type=str,
-        default="pookalam.png",
-        help="Destination path for synthesized Pookalam PNG"
+        default="test_outputs/pookalam.png",
+        help="Destination path for generated Pookalam PNG preview"
     )
     parser.add_argument(
         "--output-gcode",
         type=str,
-        default="plot.gcode",
+        default="test_outputs/plot.gcode",
         help="Destination path for compiled G-Code"
     )
     args = parser.parse_args()

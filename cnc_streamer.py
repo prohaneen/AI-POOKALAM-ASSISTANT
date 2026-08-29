@@ -131,6 +131,13 @@ def stream_gcode(
         logger.info("=" * 60)
         return True
 
+    except KeyboardInterrupt:
+        logger.warning("[ABORT] Raising pen and parking plotter.")
+        try:
+            ser.write(b"M3 S0\nG0 X0 Y0 F2000\n")
+        except Exception:
+            pass
+        return False
     except Exception as err:
         logger.error(f"[ERROR] Communication error during streaming: {err}")
         return False

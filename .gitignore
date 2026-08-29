@@ -1,0 +1,21 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Test/generated outputs
+test_outputs/
+
+# Generated Pookalam files
+*.gcode
+pookalam.png
+pookalam.svg
+pookalam_processed.png
+skel.png
+skel.svg
+test_pookalam.png
+vision_debug_overlay.png
+
+# Environment/secrets
+.env
+.venv/
+venv/

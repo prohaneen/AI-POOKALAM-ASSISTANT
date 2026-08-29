@@ -10,6 +10,7 @@ import argparse
 from typing import Dict, List, Any, Tuple, Optional
 import cv2
 import numpy as np
+from config import SETTINGS
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("PookalamVision")
@@ -83,12 +84,16 @@ def capture_frame(stream_url: Optional[str] = None, mock: bool = False) -> np.nd
 
     logger.info(f"[INFO] Connecting to camera stream at {stream_url}...")
     cap = cv2.VideoCapture(stream_url)
+    cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, int(SETTINGS.camera_timeout * 1000))
+    cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, int(SETTINGS.camera_timeout * 1000))
     if not cap.isOpened():
         logger.warning("[WARNING] Unable to open video stream. Falling back to mock frame.")
         return create_synthetic_test_frame()
 
-    ret, frame = cap.read()
-    cap.release()
+    try:
+        ret, frame = cap.read()
+    finally:
+        cap.release()
 
     if not ret or frame is None:
         logger.warning("[WARNING] Failed to grab frame from stream. Falling back to mock frame.")
@@ -112,7 +117,13 @@ def segment_color(hsv_img: np.ndarray, color_name: str) -> np.ndarray:
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
     cleaned_mask = cv2.morphologyEx(full_mask, cv2.MORPH_OPEN, kernel)
     cleaned_mask = cv2.morphologyEx(cleaned_mask, cv2.MORPH_CLOSE, kernel)
-    return cleaned_mask
+    # Reject isolated paper glare / camera noise after morphology.
+    contours, _ = cv2.findContours(cleaned_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    filtered = np.zeros_like(cleaned_mask)
+    for contour in contours:
+        if cv2.contourArea(contour) >= SETTINGS.min_contour_area:
+            cv2.drawContours(filtered, [contour], -1, 255, thickness=cv2.FILLED)
+    return filtered
 
 
 def calculate_color_percentages(frame: np.ndarray) -> Dict[str, float]:
@@ -194,7 +205,8 @@ def analyze_scene(frame: np.ndarray) -> Dict[str, Any]:
     return {
         "dominant_colors": dominant,
         "color_percentages": percentages,
-        "bands": bands
+        "spatial_regions": bands,
+        "bands": bands  # legacy compatibility
     }
 
 
