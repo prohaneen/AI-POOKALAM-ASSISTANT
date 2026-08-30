@@ -4,7 +4,25 @@
 
 Most generative AI tools create digital images that exist only on a screen. This project bridges the gap to the physical world by acting as an intelligent, resource-aware CAD planner for the traditional Onam festival. 
 
+<<<<<<< HEAD
 It looks at your *actual* physical flower petal inventory through your smartphone's IP camera, intelligently designs a culturally authentic Pookalam (floral mandala) tailored perfectly to the colors and quantities you have available, and uses a custom Arduino CNC Z-Axis Pen Plotter to physically draw the guidelines on your floor.
+=======
+It looks at your *actual* physical flower petal inventory, intelligently designs a culturally authentic Pookalam (floral mandala) tailored perfectly to your constraints, and uses a custom Arduino CNC Z-Axis Pen Plotter to physically draw the guidelines on your floor.
+
+## 🚀 The Volumetric JSON Architecture
+
+This project utilizes a highly robust 4-stage pipeline designed specifically to overcome free-tier API quotas and ensure physical plotter safety:
+
+1. **Stage 1: Local Vision Telemetry**
+   Connects to an IP Webcam and uses local OpenCV HSV segmentation to calculate the exact percentage and volume of available flower colors (Yellow, Red, White, Orange) in your physical inventory.
+2. **Stage 2: Generative JSON Planner**
+   The telemetry is sent to Google's Gemini 3.6 Flash model. Gemini acts purely as a logical planner, designing a Pookalam configuration (mapping abundant colors to thick outer rings and scarce colors to inner petals). It strictly outputs the designs as raw JSON data.
+   *(Note: Features a deterministic offline fallback if the API quota is exhausted).*
+3. **Stage 3: Deterministic Python CAD Engine**
+   A custom pure Python module parses the JSON design and uses rigorous Sine/Cosine trigonometry to mathematically draw the geometric vector outlines. It clamps all sizes to the 70x70mm plotter bounds and forces explicitly closed paths, guaranteeing perfect G-Code.
+4. **Stage 4: CNC Streaming**
+   The SVG is compiled into robotic instructions (G-Code) and streamed over USB Serial with standard ok-response handshaking to an Arduino GRBL Z-Axis plotter.
+>>>>>>> 8d114c0637001f6ff293048f9e4f2e55af5fb3f3
 
 ---
 
@@ -47,8 +65,15 @@ Start the Flask web server:
 ```powershell
 python app.py
 ```
+<<<<<<< HEAD
 Then, open your browser and navigate to:
 `http://localhost:5000` (or your PC's local IP address if accessing from a phone on the same Wi-Fi). 
+=======
+1. Position your camera over your flower piles.
+2. Press `[ENTER]` when the camera is in focus.
+3. The AI will generate a logical designs. The interactive menu allows you to either select it for plotting or regenerate the design until a satisfactory one is obtained.
+4. The system instantly compiles the math and streams it to the plotter.
+>>>>>>> 8d114c0637001f6ff293048f9e4f2e55af5fb3f3
 
 From the UI, you can view the live camera feed, adjust API settings, scan your inventory, review designs, and stream G-code directly to your plotter.
 
