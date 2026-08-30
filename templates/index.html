@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Pookalam Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>AI Pookalam Assistant</h1>
+    <p class="subtitle">Resource-Aware Physical AI Creative Partner</p>
+
+    <!-- Quota Exhaustion Alert -->
+    <div id="quota-alert" class="card hidden" style="border-color: #ef4444; background: rgba(239, 68, 68, 0.1);">
+        <h2 style="color: #ef4444; font-size: 1.2rem; margin-bottom: 0.5rem;">⚠️ API Quota Exhausted!</h2>
+        <p>Your current API key has hit a rate limit or quota exhaustion. Please change your API key below and try again, or continue with the deterministic offline fallback design.</p>
+    </div>
+
+    <div class="container">
+        <!-- Settings Panel -->
+        <div class="card" id="settings-panel">
+            <h2 class="card-title">AI Settings</h2>
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                    <label style="display: block; font-size: 0.9rem; margin-bottom: 0.3rem;">Gemini Model:</label>
+                    <select id="model-select" style="width: 100%; padding: 0.5rem; border-radius: 8px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); color: white;">
+                        <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
+                        <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite</option>
+                        <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+                        <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display: block; font-size: 0.9rem; margin-bottom: 0.3rem;">Gemini API Key (Leave empty to use env default):</label>
+                    <input type="password" id="api-key-input" placeholder="AIzaSy..." style="width: 100%; padding: 0.5rem; border-radius: 8px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); color: white;">
+                </div>
+            </div>
+        </div>
+
+        <!-- Camera Panel -->
+        <div class="card" id="camera-panel">
+            <h2 class="card-title">Live Vision Feed</h2>
+            <img id="live-cam" class="image-preview" src="" alt="Waiting for camera..." style="background: #000; object-fit: cover;">
+            
+            <button id="btn-start" onclick="startPipeline()" style="margin-top: 1rem;">
+                <span class="loader hidden" id="start-loader"></span>
+                <span id="start-text">1. Interactive Scan & Generate</span>
+            </button>
+            <div class="status-log" id="status-log" style="margin-top: 1rem;">
+                [SYSTEM] Ready to begin. Place flowers and click Scan.
+            </div>
+        </div>
+
+        <!-- Review Panel -->
+        <div class="card hidden" id="review-panel">
+            <h2 class="card-title">Design Review</h2>
+            <p>Variant <span id="variant-number">1</span> generated.</p>
+            
+            <div id="svg-container">
+                <!-- SVG will be injected here -->
+            </div>
+            
+            <div class="action-row">
+                <button class="btn-secondary" onclick="regenerateDesign()">Regenerate Design</button>
+                <button onclick="acceptDesign()">Accept & Stream</button>
+            </div>
+        </div>
+        
+        <!-- Inventory Panel -->
+        <div class="card hidden" id="inventory-panel">
+            <h2 class="card-title">Detected Inventory</h2>
+            <img id="inventory-img" class="image-preview" src="" alt="Detected Inventory">
+        </div>
+    </div>
+
+    <script>
+        const statusLog = document.getElementById('status-log');
+        let currentIteration = 1;
+
+        // Fetch config on load
+        window.onload = async () => {
+            try {
+                const res = await fetch('/api/config');
+                const config = await res.json();
+                
+                // Point to the Flask MJPEG proxy instead of the raw IP to avoid CORS/mixed-content issues
+                document.getElementById('live-cam').src = '/api/video_feed';
+                
+                if (config.model) {
+                    document.getElementById('model-select').value = config.model;
+                }
+            } catch(e) {
+                console.error("Failed to load config", e);
+            }
+        };
+
+        function logMessage(msg) {
+            const time = new Date().toLocaleTimeString();
+            statusLog.textContent += `\n[${time}] ${msg}`;
+            statusLog.scrollTop = statusLog.scrollHeight;
+        }
+
+        function getSettings() {
+            return {
+                api_key: document.getElementById('api-key-input').value.trim(),
+                model_name: document.getElementById('model-select').value
+            };
+        }
+
+        function handleMetadata(metadata) {
+            if (!metadata) return;
+            const alertBox = document.getElementById('quota-alert');
+            if (metadata.exhausted) {
+                alertBox.classList.remove('hidden');
+            } else {
+                alertBox.classList.add('hidden');
+            }
+            if (metadata.messages) {
+                metadata.messages.forEach(msg => logMessage(`[AI] ${msg}`));
+            }
+        }
+
+        async function startPipeline() {
+            document.getElementById('btn-start').disabled = true;
+            document.getElementById('start-loader').classList.remove('hidden');
+            document.getElementById('start-text').innerText = "Scanning & Generating...";
+            logMessage("Starting Stage 1: Autonomous Vision Scan...");
+
+            try {
+                const response = await fetch('/api/generate', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(getSettings())
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    logMessage("Stage 1 & 2 Complete! Design ready for review.");
+                    handleMetadata(data.metadata);
+                    showReviewPanel(data);
+                } else {
+                    logMessage(`Error: ${data.message}`);
+                    resetStartButton();
+                }
+            } catch (err) {
+                logMessage(`Network Error: ${err}`);
+                resetStartButton();
+            }
+        }
+
+        async function regenerateDesign() {
+            currentIteration++;
+            logMessage(`Requesting variant #${currentIteration}...`);
+            try {
+                const response = await fetch('/api/regenerate', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(getSettings())
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    logMessage(`Variant #${currentIteration} ready for review.`);
+                    handleMetadata(data.metadata);
+                    showReviewPanel(data);
+                } else {
+                    logMessage(`Error: ${data.message}`);
+                }
+            } catch (err) {
+                logMessage(`Network Error: ${err}`);
+            }
+        }
+
+        async function acceptDesign() {
+            logMessage("Design accepted. Compiling G-Code and streaming to CNC...");
+            document.querySelectorAll('#review-panel button').forEach(b => b.disabled = true);
+            
+            try {
+                const response = await fetch('/api/stream', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    logMessage("✅ Streaming Complete! CNC Job finished.");
+                } else {
+                    logMessage(`❌ Error during streaming: ${data.message}`);
+                }
+            } catch (err) {
+                logMessage(`Network Error: ${err}`);
+            }
+        }
+
+        function showReviewPanel(data) {
+            document.getElementById('start-loader').classList.add('hidden');
+            document.getElementById('start-text').innerText = "Pipeline Running";
+            
+            document.getElementById('review-panel').classList.remove('hidden');
+            document.getElementById('inventory-panel').classList.remove('hidden');
+            
+            document.getElementById('variant-number').innerText = currentIteration;
+            document.getElementById('svg-container').innerHTML = data.svg_content;
+            document.getElementById('inventory-img').src = data.inventory_url + "?t=" + new Date().getTime();
+        }
+
+        function resetStartButton() {
+            document.getElementById('btn-start').disabled = false;
+            document.getElementById('start-loader').classList.add('hidden');
+            document.getElementById('start-text').innerText = "1. Interactive Scan & Generate";
+        }
+    </script>
+</body>
+</html>

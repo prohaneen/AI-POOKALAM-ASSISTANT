@@ -28,10 +28,14 @@ def fallback_designs(telemetry_str: str) -> dict:
         ]
     }
 
-def generate_json_spec(telemetry_str: str, api_key: str = None) -> dict:
+def generate_json_spec(telemetry_str: str, api_key: str = None, model_override: str = None) -> tuple[dict, dict]:
     key = api_key or os.environ.get('GEMINI_API_KEY')
+    metadata = {"fallback_used": False, "exhausted": False, "messages": []}
+    
     if not key:
-        return fallback_designs(telemetry_str)
+        metadata["fallback_used"] = True
+        metadata["messages"].append("No API key provided. Using deterministic fallback.")
+        return fallback_designs(telemetry_str), metadata
         
     from google import genai
     from google.genai import types
@@ -43,7 +47,7 @@ def generate_json_spec(telemetry_str: str, api_key: str = None) -> dict:
 Inventory Payload: {telemetry_str}"""
 
     # Build sequential list starting with primary model
-    models_to_try = [SETTINGS.gemini_model]
+    models_to_try = [model_override] if model_override else [SETTINGS.gemini_model]
     
     # Array of robust fallbacks
     fallbacks = [
@@ -75,13 +79,18 @@ Inventory Payload: {telemetry_str}"""
                 raise ValueError("Response missing 'layers' array.")
                 
             logger.info(f"[THINK] Successfully reasoned JSON design using {model_name}.")
-            return specs
+            metadata["model_used"] = model_name
+            return specs, metadata
             
         except Exception as e:
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e) or "Quota" in str(e):
                 logger.warning(f"[WARNING] Quota Exhausted on {model_name}. Trying next...")
+                metadata["exhausted"] = True
+                metadata["messages"].append(f"Quota exhausted on {model_name}.")
             else:
                 logger.warning(f"[WARNING] Generation failed on {model_name} ({e}). Trying next...")
+                metadata["messages"].append(f"Error on {model_name}: {e}")
                 
     logger.error("[ERROR] All Gemini models failed or hit quota limits. Falling back to local deterministic designs.")
-    return fallback_designs(telemetry_str)
+    metadata["fallback_used"] = True
+    return fallback_designs(telemetry_str), metadata

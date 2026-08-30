@@ -5,3 +5,4 @@ google-genai
 pyserial
 svg-to-gcode
 python-dotenv
+Flask
