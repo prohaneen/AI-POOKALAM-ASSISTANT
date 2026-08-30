@@ -13,7 +13,7 @@ This project utilizes a highly robust 4-stage pipeline designed specifically to 
 1. **Stage 1: Local Vision Telemetry**
    Connects to an IP Webcam and uses local OpenCV HSV segmentation to calculate the exact percentage and volume of available flower colors (Yellow, Red, White, Orange) in your physical inventory.
 2. **Stage 2: Generative JSON Planner**
-   The telemetry is sent to Google's Gemini 3.6 Flash model. Gemini acts purely as a logical planner, designing 3 Pookalam configurations (mapping abundant colors to thick outer rings and scarce colors to inner petals). It strictly outputs the designs as raw JSON data.
+   The telemetry is sent to Google's Gemini 3.6 Flash model. Gemini acts purely as a logical planner, designing a Pookalam configuration (mapping abundant colors to thick outer rings and scarce colors to inner petals). It strictly outputs the designs as raw JSON data.
    *(Note: Features a deterministic offline fallback if the API quota is exhausted).*
 3. **Stage 3: Deterministic Python CAD Engine**
    A custom pure Python module parses the JSON design and uses rigorous Sine/Cosine trigonometry to mathematically draw the geometric vector outlines. It clamps all sizes to the 70x70mm plotter bounds and forces explicitly closed paths, guaranteeing perfect G-Code.
@@ -36,7 +36,7 @@ python main.py --ipcam http://YOUR_PHONE_IP:8080/video --port COM3 --baud 115200
 ```
 1. Position your camera over your flower piles.
 2. Press `[ENTER]` when the camera is in focus.
-3. The AI will generate 3 text-based logical designs. Enter `1`, `2`, or `3` to pick your favorite.
+3. The AI will generate a logical designs. The interactive menu allows you to either select it for plotting or regenerate the design until a satisfactory one is obtained.
 4. The system instantly compiles the math and streams it to the plotter.
 
 ### Option 2: Live Camera + Simulated CNC
