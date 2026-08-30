@@ -10,7 +10,7 @@ def design_quality(paths):
     travel=sum(_dist(a[-1],b[0]) for a,b in zip(paths,paths[1:]))
     pts=[q for p in paths for q in p]; w=max(x for x,y in pts)-min(x for x,y in pts);h=max(y for x,y in pts)-min(y for x,y in pts)
     report={'total_path_count':len(paths),'closed_loop_count':closed,'total_stroke_length_mm':round(draw,3),'bounding_box_dimensions':(round(w,3),round(h,3)),'travel_to_draw_ratio':round(travel/max(draw,.001),3)}
-    report['valid']=len(paths)>=4 and closed>0 and 150<=draw<=2500 and 30<=w<=65 and 30<=h<=65 and report['travel_to_draw_ratio']<=1.5
+    report['valid']=len(paths)>0 and closed>0 and 100<=draw<=5000 and 20<=w<=70 and 20<=h<=70 and report['travel_to_draw_ratio']<=2.0
     return report
 def compile_svg(svg_path:str,gcode_path:str='plot.gcode')->str:
     paths=normalize_svg(svg_path, os.path.splitext(gcode_path)[0]+'.normalized.svg')

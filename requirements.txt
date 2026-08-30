@@ -2,6 +2,6 @@ opencv-python
 numpy
 requests
 google-genai
-vtracer
 pyserial
 svg-to-gcode
+python-dotenv

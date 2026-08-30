@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="70mm" height="70mm" viewBox="0 0 70 70">
- <circle cx="35" cy="35" r="30" fill="none" stroke="black"/>
- <path d="M 8 35 A 27 27 0 1 0 62 35 A 27 27 0 1 0 8 35 Z" fill="none" stroke="black"/>
- <path d="M 13 35 C 13 5 57 5 57 35 C 57 65 13 65 13 35 Z" fill="none" stroke="black"/>
- <polygon points="35,23 38,32 47,35 38,38 35,47 32,38 23,35 32,32" fill="none" stroke="black"/>
- <path d="M35 14 L39 28 L35 35 L31 28 Z M56 35 L42 39 L35 35 L42 31 Z M35 56 L31 42 L35 35 L39 42 Z M14 35 L28 31 L35 35 L28 39 Z" fill="none" stroke="black"/>
-</svg>

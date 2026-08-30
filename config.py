@@ -1,5 +1,6 @@
 """Central configuration for the 70 mm Adaptive Pookalam plotter."""
 from dataclasses import dataclass
+import os
 
 @dataclass(frozen=True)
 class Settings:
@@ -17,6 +18,6 @@ class Settings:
     pen_down_cmd: str = "M3 S90"
     default_port: str = "/dev/ttyACM0"
     default_baud: int = 115200
-    gemini_model: str = "gemini-2.5-pro"
+    gemini_model: str = os.environ.get("GEMINI_MODEL_NAME", "gemini-3.6-flash")
 
 SETTINGS = Settings()

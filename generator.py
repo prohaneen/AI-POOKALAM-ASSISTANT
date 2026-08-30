@@ -1,34 +1,87 @@
-"""Gemini produces a bounded JSON design decision; Python produces every vector."""
-import json, os, time
-from typing import Any, Dict, List, Union
+import os
+import json
+import logging
 from config import SETTINGS
-from geometry import fallback_spec, generate_svg, validate_spec
 
-def build_pookalam_prompt(colors: List[str]) -> str:
-    return ("Return JSON only: canvas_size_mm, symmetry_order, outer_boundary and layers. "
-      "Allowed layer types: pointed_petals, scallop_ring, central_star. All radii <=30 mm. "
-      f"Use this observed palette: {', '.join(colors)}. Do not return SVG.")
-def _colors(value):
-    if isinstance(value,dict): return value.get('dominant_colors') or [x['color'] for x in value.get('spatial_regions',value.get('bands',[]))]
-    return list(value)
-def request_design_spec(colors:List[str], api_key=None)->Dict[str,Any]:
-    key=api_key or os.environ.get('GEMINI_API_KEY')
-    if not key:return fallback_spec(colors)
+logger = logging.getLogger("PookalamGenerator")
+
+def fallback_designs(telemetry_str: str) -> dict:
+    """Fallback JSON array if API fails."""
+    logger.info("[FALLBACK] API quota exhausted. Using local deterministic fallback.")
+    colors = ["Yellow", "Red", "Pink", "White"]
     try:
-        from google import genai
-        from google.genai import types
-        client=genai.Client(api_key=key)
-        for attempt in range(3):
-            try:
-                response=client.models.generate_content(model=SETTINGS.gemini_model,contents=build_pookalam_prompt(colors),config=types.GenerateContentConfig(response_mime_type='application/json'))
-                return validate_spec(json.loads(response.text))
-            except Exception:
-                if attempt==2: raise
-                time.sleep(.5*(2**attempt))
-    except Exception:return fallback_spec(colors)
-def generate_pookalam_design(colors_or_observation:Union[List[str],Dict[str,Any]],output_path='pookalam.svg',model=None,api_key=None)->str:
-    colors=_colors(colors_or_observation);spec=request_design_spec(colors,api_key)
-    if not output_path.lower().endswith('.svg'): output_path=os.path.splitext(output_path)[0]+'.svg'
-    with open(output_path,'w',encoding='utf8') as f:f.write(generate_svg(spec))
-    with open(os.path.splitext(output_path)[0]+'.spec.json','w',encoding='utf8') as f:json.dump(spec,f,indent=2)
-    return output_path
+        data = json.loads(telemetry_str)
+        if "available_inventory" in data:
+            colors = list(data["available_inventory"].keys())
+    except:
+        pass
+        
+    c1 = colors[0] if len(colors) > 0 else "Yellow"
+    c2 = colors[1 % len(colors)] if len(colors) > 1 else "Red"
+    c3 = colors[2 % len(colors)] if len(colors) > 2 else "Pink"
+    
+    return {
+        "layers": [
+            {"radius_mm": 30, "pattern": "circle", "element_count": 1, "color": c1},
+            {"radius_mm": 20, "pattern": "petals", "element_count": 12, "color": c2},
+            {"radius_mm": 10, "pattern": "star", "element_count": 8, "color": c3}
+        ]
+    }
+
+def generate_json_spec(telemetry_str: str, api_key: str = None) -> dict:
+    key = api_key or os.environ.get('GEMINI_API_KEY')
+    if not key:
+        return fallback_designs(telemetry_str)
+        
+    from google import genai
+    from google.genai import types
+    
+    client = genai.Client(api_key=key)
+    
+    prompt = f"""You are an expert Onam Pookalam CNC planner constrained by strict physical inventory. Map flowers with LARGE volume to the outer concentric rings (which require the most area). Map flowers with SMALL volume to the inner rings or sparse petal details. Output a single JSON design specification containing an array of 'layers'. Each layer must specify: 'radius_mm' (max 30mm), 'pattern' (choose from: circle, petals, scallop, star), 'element_count', and 'color'.
+
+Inventory Payload: {telemetry_str}"""
+
+    # Build sequential list starting with primary model
+    models_to_try = [SETTINGS.gemini_model]
+    
+    # Array of robust fallbacks
+    fallbacks = [
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.6-flash",
+        "gemini-2.5-flash-lite"
+    ]
+    
+    for f in fallbacks:
+        if f not in models_to_try:
+            models_to_try.append(f)
+            
+    for model_name in models_to_try:
+        logger.info(f"==> THINK: Requesting JSON from {model_name}...")
+        
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                )
+            )
+            
+            specs = json.loads(response.text)
+            if "layers" not in specs:
+                raise ValueError("Response missing 'layers' array.")
+                
+            logger.info(f"[THINK] Successfully reasoned JSON design using {model_name}.")
+            return specs
+            
+        except Exception as e:
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                logger.warning(f"[WARNING] Quota Exhausted on {model_name}. Trying next...")
+            else:
+                logger.warning(f"[WARNING] Generation failed on {model_name} ({e}). Trying next...")
+                
+    logger.error("[ERROR] All Gemini models failed or hit quota limits. Falling back to local deterministic designs.")
+    return fallback_designs(telemetry_str)

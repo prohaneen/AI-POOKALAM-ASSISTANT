@@ -1,222 +1,142 @@
-"""
-AI Pookalam Assistant - Master Pipeline Orchestrator
-Physical AI Creative Partner for Arduino UNO Q (Debian Linux)
-Executes end-to-end workflow:
-  [1] Computer Vision (IP Webcam / Mock Evaluation)
-  [2] Generative AI Design (Gemini 2.5 / Imagen)
-  [3] G-Code Vectorization & Bed Scaling (70x70 mm)
-  [4] CNC Streamer & GRBL Handshake (Arduino UNO Q / GRBL)
-"""
-
 import os
 import sys
 import time
 import argparse
 import logging
-from typing import Dict, Any
 
-from vision import capture_frame, analyze_scene, print_diagnostic_output, draw_debug_visualization
-from generator import generate_pookalam_design
-from gcode_converter import compile_svg, validate_gcode, design_quality
-from svg_normalizer import normalize_svg
-from geometry import render_svg_preview
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+from vision import autonomous_inventory_scan
+from generator import generate_json_spec
+from deterministic_renderer import generate_svg
+from gcode_converter import compile_svg
 from cnc_streamer import stream_gcode
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
-logger = logging.getLogger("PookalamMain")
+logger = logging.getLogger("PookalamMaster")
 
-
-def print_banner(title: str, subtitle: str = "") -> None:
-    """Prints a bold, visually striking console banner for live demo presentation."""
+def print_banner(*lines: str):
     width = 70
-    logger.info("\n" + "=" * width)
-    logger.info(f"  {title}".center(width))
-    if subtitle:
-        logger.info(f"  {subtitle}".center(width))
-    logger.info("=" * width + "\n")
-
+    print("\n" + "=" * width)
+    for line in lines:
+        print(line.center(width))
+    print("=" * width + "\n")
 
 def run_pipeline(
-    ipcam_url: str = None,
+    ipcam_url: str = "",
     mock: bool = False,
     visualize: bool = False,
     serial_port: str = "/dev/ttyACM0",
     baudrate: int = 115200,
-    simulate_cnc: bool = False,
-    png_output: str = "test_outputs/pookalam.png",
+    simulate: bool = False,
+    png_output: str = "test_outputs/inventory.jpg",
     gcode_output: str = "test_outputs/plot.gcode"
-) -> bool:
-    """
-    Executes the linear 4-stage Physical AI Pookalam Assistant pipeline.
-    """
+):
     start_time = time.time()
     output_dir = os.path.dirname(png_output) or "."
     os.makedirs(output_dir, exist_ok=True)
-
+    
+    from config import SETTINGS
+    
     print_banner(
         "[AI POOKALAM ASSISTANT]",
-        "Resource-Aware Physical AI Creative Partner | Onam Edition 2026"
+        "Resource-Aware Physical AI Creative Partner | Onam Edition 2026",
+        "** FULLY AUTONOMOUS 'SENSE -> THINK -> ACT' ARCHITECTURE **"
     )
 
-    # -------------------------------------------------------------------------
-    # STAGE 1: COMPUTER VISION & SPATIAL COLOR DETECTION
-    # -------------------------------------------------------------------------
-    logger.info(">>> [STAGE 1/4] ACQUIRING FLORAL INVENTORY & SPATIAL LAYERS...")
-    time.sleep(0.5)
-
+    # SENSE
+    print("\n" + "="*50)
+    print(">>> [STAGE 1] AUTONOMOUS VISION SENSE")
+    print("="*50)
     try:
-        raw_frame = capture_frame(stream_url=ipcam_url, mock=mock)
-        telemetry: Dict[str, Any] = analyze_scene(raw_frame)
-        print_diagnostic_output(telemetry)
-
-        if visualize:
-            import cv2
-            overlay_file = os.path.join(output_dir, "vision_debug_overlay.png")
-            debug_img = draw_debug_visualization(raw_frame, telemetry)
-            cv2.imwrite(overlay_file, debug_img)
-            logger.info(f"[STAGE 1 SUCCESS] Diagnostic HUD overlay saved to '{overlay_file}'.")
-
-        dominant_colors = telemetry.get("dominant_colors", [])
-        if not dominant_colors:
-            logger.warning("[WARNING] No distinct dominant colors identified. Using default palette.")
-            dominant_colors = ["Golden Yellow", "Indigo", "Pink/Orchid"]
-
-    except Exception as err:
-        logger.error(f"[STAGE 1 FAILURE] Computer Vision pipeline error: {err}")
+        inventory_img_path, telemetry = autonomous_inventory_scan(stream_url=ipcam_url, mock=mock, visualize=visualize, output_path=os.path.join(output_dir, "inventory.jpg"))
+    except Exception as e:
+        logger.error(f"[ERROR] Vision stage failed: {e}")
         return False
 
-    # -------------------------------------------------------------------------
-    # STAGE 2: GENERATIVE AI DESIGN SYNTHESIS (GEMINI)
-    # -------------------------------------------------------------------------
-    logger.info("\n>>> [STAGE 2/4] SYNTHESIZING ADAPTIVE 2D MANDALA DESIGN WITH GEMINI...")
-    time.sleep(0.5)
-
+    # THINK
+    print("\n" + "="*50)
+    print(">>> [STAGE 2] AI LOGICAL REASONING (JSON)")
+    print("="*50)
     try:
-        generated_svg = generate_pookalam_design(
-            colors_or_observation=telemetry,
-            output_path=os.path.splitext(png_output)[0] + ".svg"
-        )
-        preview_png = png_output if png_output.lower().endswith(".png") else os.path.splitext(png_output)[0] + ".png"
-        render_svg_preview(generated_svg, preview_png)
-        logger.info(f"[STAGE 2 SUCCESS] Deterministic geometry source saved to '{generated_svg}'.")
-        logger.info(f"[STAGE 2 SUCCESS] PNG preview saved to '{preview_png}'.")
-    except Exception as err:
-        logger.error(f"[STAGE 2 FAILURE] Generative AI design synthesis error: {err}")
+        json_spec = generate_json_spec(telemetry)
+        logger.info(f"[THINK] Final JSON Payload:\n{json_spec}")
+    except Exception as e:
+        logger.error(f"[ERROR] Logic stage failed: {e}")
         return False
 
-    # -------------------------------------------------------------------------
-    # STAGE 3: VECTOR TRACING & G-CODE COMPILATION (70x70mm BED)
-    # -------------------------------------------------------------------------
-    logger.info("\n>>> [STAGE 3/4] VECTORIZING SVG & COMPILING SERVO G-CODE...")
-    time.sleep(0.5)
-
+    # ACT (CAD)
+    print("\n" + "="*50)
+    print(">>> [STAGE 3] DETERMINISTIC CAD RENDERER")
+    print("="*50)
     try:
-        compiled_gcode = compile_svg(generated_svg, gcode_output)
-        logger.info(f"[DESIGN QUALITY] {design_quality(normalize_svg(generated_svg))}")
-        logger.info(f"[G-CODE PRE-FLIGHT] {validate_gcode(compiled_gcode)}")
-        logger.info(f"[STAGE 3 SUCCESS] G-Code generated and scaled strictly to 70x70mm: '{compiled_gcode}'.")
-    except Exception as err:
-        logger.error(f"[STAGE 3 FAILURE] G-Code compilation error: {err}")
+        plot_svg = os.path.join(output_dir, "plot.svg")
+        generate_svg(json_spec, plot_svg)
+    except Exception as e:
+        logger.error(f"[ERROR] CAD Generation failed: {e}")
         return False
 
-    # -------------------------------------------------------------------------
-    # STAGE 4: CNC STREAMER & PHYSICAL PLOTTER EXECUTION
-    # -------------------------------------------------------------------------
-    logger.info("\n>>> [STAGE 4/4] STREAMING G-CODE TO ARDUINO CNC PLOTTER...")
-    time.sleep(0.5)
-
+    # ACT (G-CODE)
+    print("\n" + "="*50)
+    print(">>> [STAGE 4] G-CODE COMPILATION")
+    print("="*50)
     try:
-        success = stream_gcode(
-            gcode_path=compiled_gcode,
+        compile_svg(svg_path=plot_svg, gcode_path=gcode_output)
+        logger.info(f"[ACT] Successfully compiled G-Code to {gcode_output}")
+    except Exception as e:
+        logger.error(f"[ERROR] G-Code Compilation failed: {e}")
+        return False
+
+    # ACT (STREAM)
+    print("\n" + "="*50)
+    print(">>> [STAGE 5] STREAMING TO CNC PLOTTER")
+    print("="*50)
+    try:
+        stream_gcode(
+            gcode_path=gcode_output,
             port=serial_port,
             baudrate=baudrate,
-            simulate=simulate_cnc
+            simulate=simulate
         )
-        if not success:
-            logger.error("[STAGE 4 FAILURE] CNC streaming encountered an issue.")
-            return False
-    except Exception as err:
-        logger.error(f"[STAGE 4 FAILURE] Serial CNC Streamer error: {err}")
+    except Exception as e:
+        logger.error(f"\n[ERROR] CNC Streaming failed: {e}")
         return False
-
-    # -------------------------------------------------------------------------
-    # PIPELINE COMPLETE
-    # -------------------------------------------------------------------------
-    elapsed = round(time.time() - start_time, 2)
-    print_banner(
-        "[PIPELINE EXECUTION COMPLETE]",
-        f"Total End-to-End Execution Time: {elapsed}s"
-    )
-    logger.info("Artifacts Generated:")
-    logger.info(f"  * Vision Overlay : {os.path.join(output_dir, 'vision_debug_overlay.png') if visualize else 'Skipped (--visualize to enable)'}")
-    logger.info(f"  * Pookalam Preview: {preview_png}")
-    logger.info(f"  * Vector SVG     : {os.path.splitext(png_output)[0] + '.svg'}")
-    logger.info(f"  * Plotter G-Code : {gcode_output} (70x70 mm bounded)")
-    logger.info("\n" + "=" * 70 + "\n")
+        
+    print("\n" + "=" * 70)
+    print("                 [PIPELINE EXECUTION COMPLETE]                ")
+    print(f"            Total End-to-End Execution Time: {time.time() - start_time:.2f}s  ")
+    print("=" * 70)
     return True
 
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Adaptive Pookalam Physical AI Assistant - Master Pipeline"
-    )
-    parser.add_argument(
-        "--ipcam",
-        type=str,
-        default=None,
-        help="IP Webcam video feed URL (e.g. http://192.168.1.50:8080/video)"
-    )
-    parser.add_argument(
-        "--mock",
-        action="store_true",
-        help="Run in synthetic benchmark evaluation mode without physical camera"
-    )
-    parser.add_argument(
-        "--visualize",
-        action="store_true",
-        help="Save diagnostic HUD visualization overlay (vision_debug_overlay.png)"
-    )
-    parser.add_argument(
-        "--port",
-        type=str,
-        default="/dev/ttyACM0",
-        help="Serial port for Arduino UNO Q / GRBL controller (default: /dev/ttyACM0)"
-    )
-    parser.add_argument(
-        "--baud",
-        type=int,
-        default=115200,
-        help="Serial baudrate (default: 115200)"
-    )
-    parser.add_argument(
-        "--simulate",
-        action="store_true",
-        help="Simulate CNC plotting in terminal without hardware connection"
-    )
-    parser.add_argument(
-        "--output-png",
-        type=str,
-        default="test_outputs/pookalam.png",
-        help="Destination path for generated Pookalam PNG preview"
-    )
-    parser.add_argument(
-        "--output-gcode",
-        type=str,
-        default="test_outputs/plot.gcode",
-        help="Destination path for compiled G-Code"
-    )
+    parser = argparse.ArgumentParser(description="Adaptive Pookalam Physical AI Assistant - Master Pipeline")
+    parser.add_argument("--ipcam", type=str, default="http://10.136.106.51:4747/video", help="IP Webcam video feed URL")
+    parser.add_argument("--mock", action="store_true", help="Run in synthetic benchmark evaluation mode")
+    parser.add_argument("--visualize", action="store_true", help="Save diagnostic HUD visualization overlay")
+    parser.add_argument("--port", type=str, default="/dev/ttyACM0", help="Serial port for CNC")
+    parser.add_argument("--baud", type=int, default=115200, help="Serial baudrate")
+    parser.add_argument("--simulate", action="store_true", help="Simulate CNC plotting in terminal")
+    parser.add_argument("--output-png", type=str, default="test_outputs/inventory.jpg", help="Destination path for inventory JPG")
+    parser.add_argument("--output-gcode", type=str, default="test_outputs/plot.gcode", help="Destination path for compiled G-Code")
+    parser.add_argument("--list-models", action="store_true", help="List available Gemini models")
+
     args = parser.parse_args()
 
-    # Default to mock if neither live stream nor mock flag was explicitly specified
-    is_mock = args.mock or (args.ipcam is None)
-
-    run_pipeline(
-        ipcam_url=args.ipcam,
-        mock=is_mock,
-        visualize=args.visualize,
-        serial_port=args.port,
-        baudrate=args.baud,
-        simulate_cnc=args.simulate,
-        png_output=args.output_png,
-        gcode_output=args.output_gcode
-    )
+    try:
+        run_pipeline(
+            ipcam_url=args.ipcam,
+            mock=args.mock,
+            visualize=args.visualize,
+            serial_port=args.port,
+            baudrate=args.baud,
+            simulate=args.simulate,
+            png_output=args.output_png,
+            gcode_output=args.output_gcode
+        )
+    except KeyboardInterrupt:
+        print("\n[INFO] Exiting pipeline.")
+        sys.exit(1)
